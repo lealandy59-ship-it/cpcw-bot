@@ -10,7 +10,7 @@ const {
 } = require('discord.js');
 
 // =====================
-// SAFE REPLY SYSTEM
+// SAFE REPLY
 // =====================
 async function safeReply(i, content) {
   try {
@@ -24,13 +24,13 @@ async function safeReply(i, content) {
 }
 
 // =====================
-// SIMPLE MEMORY DB
+// MEMORY DATABASE
 // =====================
 const db = {
-  teams: {},        // teamName -> { ownerId, members: [] }
-  warnings: {},     // userId -> []
-  strikes: {},      // teamName -> number
-  suspensions: {}   // userId -> { until: timestamp }
+  teams: {},
+  warnings: {},
+  strikes: {},
+  suspensions: {}
 };
 
 // =====================
@@ -42,41 +42,34 @@ const commands = [
   {
     data: new SlashCommandBuilder()
       .setName('addteam')
-      .setDescription('Create a new crew')
+      .setDescription('Create a crew')
       .addStringOption(o =>
-        o.setName('name').setDescription('Crew name').setRequired(true)
-      )
-      .addUserOption(o =>
-        o.setName('owner').setDescription('Team owner').setRequired(true)
+        o.setName('name').setDescription('Team name').setRequired(true)
       ),
 
     async execute(i) {
       const name = i.options.getString('name');
-      const owner = i.options.getUser('owner');
 
       if (db.teams[name]) {
         return safeReply(i, '❌ Team already exists.');
       }
 
-      db.teams[name] = {
-        ownerId: owner.id,
-        members: [owner.id]
-      };
+      db.teams[name] = { members: [] };
 
-      safeReply(i, `🏷️ Team **${name}** created with owner ${owner.username}`);
+      safeReply(i, `🏷️ Team **${name}** created.`);
     }
   },
 
-  // SIGN PLAYER
+  // SIGN
   {
     data: new SlashCommandBuilder()
       .setName('sign')
-      .setDescription('Sign a player to a team')
+      .setDescription('Add player to team')
       .addStringOption(o =>
-        o.setName('team').setDescription('Team name').setRequired(true)
+        o.setName('team').setDescription('Team').setRequired(true)
       )
       .addUserOption(o =>
-        o.setName('user').setDescription('Player').setRequired(true)
+        o.setName('user').setDescription('User').setRequired(true)
       ),
 
     async execute(i) {
@@ -84,9 +77,8 @@ const commands = [
       const user = i.options.getUser('user');
 
       if (!db.teams[team]) return safeReply(i, '❌ Team not found.');
-
       if (db.teams[team].members.length >= 10) {
-        return safeReply(i, '❌ Team roster is full (10 max).');
+        return safeReply(i, '❌ Team is full (10 max).');
       }
 
       db.teams[team].members.push(user.id);
@@ -95,16 +87,16 @@ const commands = [
     }
   },
 
-  // RELEASE PLAYER
+  // RELEASE
   {
     data: new SlashCommandBuilder()
       .setName('release')
-      .setDescription('Remove player from team')
+      .setDescription('Remove player')
       .addStringOption(o =>
-        o.setName('team').setDescription('Team name').setRequired(true)
+        o.setName('team').setDescription('Team').setRequired(true)
       )
       .addUserOption(o =>
-        o.setName('user').setDescription('Player').setRequired(true)
+        o.setName('user').setDescription('User').setRequired(true)
       ),
 
     async execute(i) {
@@ -120,31 +112,7 @@ const commands = [
     }
   },
 
-  // PROMOTE
-  {
-    data: new SlashCommandBuilder()
-      .setName('promote')
-      .setDescription('Set captain (not role-based yet)')
-      .addStringOption(o =>
-        o.setName('team').setDescription('Team').setRequired(true)
-      )
-      .addUserOption(o =>
-        o.setName('user').setDescription('Player').setRequired(true)
-      ),
-
-    async execute(i) {
-      const team = i.options.getString('team');
-      const user = i.options.getUser('user');
-
-      if (!db.teams[team]) return safeReply(i, '❌ Team not found.');
-
-      db.teams[team].captain = user.id;
-
-      safeReply(i, `⬆️ ${user.username} is now captain of ${team}`);
-    }
-  },
-
-  // STRIKE TEAM
+  // STRIKE
   {
     data: new SlashCommandBuilder()
       .setName('strike')
@@ -160,15 +128,15 @@ const commands = [
 
       db.strikes[team] = (db.strikes[team] || 0) + 1;
 
-      safeReply(i, `⚡ ${team} now has ${db.strikes[team]} strike(s)`);
+      safeReply(i, `⚡ ${team} has ${db.strikes[team]} strike(s)`);
     }
   },
 
-  // WARN USER
+  // WARN
   {
     data: new SlashCommandBuilder()
       .setName('warn')
-      .setDescription('Warn a player')
+      .setDescription('Warn user')
       .addUserOption(o =>
         o.setName('user').setDescription('User').setRequired(true)
       )
@@ -181,14 +149,13 @@ const commands = [
       const reason = i.options.getString('reason');
 
       if (!db.warnings[user.id]) db.warnings[user.id] = [];
-
       db.warnings[user.id].push(reason);
 
       safeReply(i, `⚠️ ${user.username} warned: ${reason}`);
     }
   },
 
-  // VIEW WARNINGS
+  // WARNS
   {
     data: new SlashCommandBuilder()
       .setName('warns')
@@ -201,7 +168,7 @@ const commands = [
       const user = i.options.getUser('user');
       const warns = db.warnings[user.id] || [];
 
-      safeReply(i, `📋 ${user.username} has ${warns.length} warning(s).`);
+      safeReply(i, `📋 ${user.username} has ${warns.length} warning(s)`);
     }
   },
 
@@ -209,7 +176,7 @@ const commands = [
   {
     data: new SlashCommandBuilder()
       .setName('suspend')
-      .setDescription('Suspend a player')
+      .setDescription('Suspend player')
       .addUserOption(o =>
         o.setName('user').setDescription('User').setRequired(true)
       )
@@ -221,15 +188,13 @@ const commands = [
       const user = i.options.getUser('user');
       const days = i.options.getInteger('days');
 
-      db.suspensions[user.id] = {
-        until: Date.now() + days * 86400000
-      };
+      db.suspensions[user.id] = Date.now() + days * 86400000;
 
       safeReply(i, `🚫 ${user.username} suspended for ${days} day(s)`);
     }
   },
 
-  // BAil (remove suspension)
+  // BAIL
   {
     data: new SlashCommandBuilder()
       .setName('bail')
@@ -256,26 +221,26 @@ const commands = [
     async execute(i) {
       safeReply(i,
         `📋 Commands:
-addteam, sign, release, promote, strike, warn, warns, suspend, bail`
+/addteam /sign /release /strike /warn /warns /suspend /bail`
       );
     }
   }
 ];
 
 // =====================
-// BOT SETUP
+// BOT
 // =====================
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
 client.commands = new Collection();
-for (const cmd of commands) {
-  client.commands.set(cmd.data.name, cmd);
+for (const c of commands) {
+  client.commands.set(c.data.name, c);
 }
 
 // =====================
-// REGISTER COMMANDS
+// REGISTER
 // =====================
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
@@ -291,7 +256,7 @@ client.once('ready', async () => {
 });
 
 // =====================
-// INTERACTIONS FIXED
+// FIXED INTERACTIONS
 // =====================
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
@@ -303,13 +268,11 @@ client.on('interactionCreate', async interaction => {
     await cmd.execute(interaction);
   } catch (err) {
     console.error(err);
-    await safeReply(interaction, '❌ Command error.');
+    await safeReply(interaction, '❌ Error running command.');
   }
 });
 
-// =====================
 process.on('unhandledRejection', console.error);
 process.on('uncaughtException', console.error);
 
-// LOGIN
 client.login(process.env.TOKEN);
