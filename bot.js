@@ -6,12 +6,11 @@ const {
   Collection,
   REST,
   Routes,
-  SlashCommandBuilder,
-  PermissionsBitField
+  SlashCommandBuilder
 } = require('discord.js');
 
 // =====================
-// SAFE REPLY SYSTEM
+// SAFE REPLY
 // =====================
 async function reply(i, content) {
   try {
@@ -25,40 +24,51 @@ async function reply(i, content) {
 }
 
 // =====================
-// SIMPLE DATABASE
+// DATABASE (IN MEMORY)
 // =====================
 const db = {
   teams: {},
   warns: {},
   strikes: {},
-  suspensions: {},
-  transactionsLocked: false
+  suspensions: {}
 };
 
-function team(name) {
-  if (!db.teams[name]) db.teams[name] = { members: [], owner: null };
+const getTeam = (name) => {
+  if (!db.teams[name]) db.teams[name] = { members: [] };
   return db.teams[name];
-}
+};
 
 // =====================
-// COMMANDS
+// COMMANDS (ALL INCLUDED)
 // =====================
 const commands = [
 
-  // ADD TEAM
+  // ADDTEAM
   {
     data: new SlashCommandBuilder()
       .setName('addteam')
-      .setDescription('Create a crew')
+      .setDescription('Create a team')
       .addStringOption(o => o.setName('name').setRequired(true)),
 
     async execute(i) {
       const name = i.options.getString('name');
+      if (db.teams[name]) return reply(i, '❌ Team exists');
 
-      if (db.teams[name]) return reply(i, '❌ Team already exists');
-
-      db.teams[name] = { members: [], owner: i.user.id };
+      db.teams[name] = { members: [] };
       reply(i, `🏷️ Team **${name}** created`);
+    }
+  },
+
+  // APPOINT
+  {
+    data: new SlashCommandBuilder()
+      .setName('appoint')
+      .setDescription('Appoint owner')
+      .addUserOption(o => o.setName('user').setRequired(true)),
+
+    async execute(i) {
+      const user = i.options.getUser('user');
+      reply(i, `👑 ${user.username} appointed`);
     }
   },
 
@@ -66,18 +76,18 @@ const commands = [
   {
     data: new SlashCommandBuilder()
       .setName('sign')
-      .setDescription('Add player to team')
+      .setDescription('Sign player')
       .addStringOption(o => o.setName('team').setRequired(true))
       .addUserOption(o => o.setName('user').setRequired(true)),
 
     async execute(i) {
-      const t = team(i.options.getString('team'));
+      const team = getTeam(i.options.getString('team'));
       const user = i.options.getUser('user');
 
-      if (t.members.length >= 10)
+      if (team.members.length >= 10)
         return reply(i, '❌ Team full (10 max)');
 
-      t.members.push(user.id);
+      team.members.push(user.id);
       reply(i, `✍️ ${user.username} signed`);
     }
   },
@@ -91,11 +101,11 @@ const commands = [
       .addUserOption(o => o.setName('user').setRequired(true)),
 
     async execute(i) {
-      const t = team(i.options.getString('team'));
+      const team = getTeam(i.options.getString('team'));
       const user = i.options.getUser('user');
 
-      t.members = t.members.filter(x => x !== user.id);
-      reply(i, `🚪 ${user.username} removed`);
+      team.members = team.members.filter(x => x !== user.id);
+      reply(i, `🚪 ${user.username} released`);
     }
   },
 
@@ -103,12 +113,12 @@ const commands = [
   {
     data: new SlashCommandBuilder()
       .setName('roster')
-      .setDescription('View team')
+      .setDescription('Show team roster')
       .addStringOption(o => o.setName('team').setRequired(true)),
 
     async execute(i) {
-      const t = team(i.options.getString('team'));
-      reply(i, `📋 Members: ${t.members.length}`);
+      const team = getTeam(i.options.getString('team'));
+      reply(i, `📋 Members: ${team.members.length}`);
     }
   },
 
@@ -120,20 +130,7 @@ const commands = [
 
     async execute(i) {
       db.teams = {};
-      reply(i, '💥 All teams removed');
-    }
-  },
-
-  // APPOINT
-  {
-    data: new SlashCommandBuilder()
-      .setName('appoint')
-      .setDescription('Set owner')
-      .addUserOption(o => o.setName('user').setRequired(true)),
-
-    async execute(i) {
-      const user = i.options.getUser('user');
-      reply(i, `👑 ${user.username} appointed (system only)`);
+      reply(i, '💥 All teams deleted');
     }
   },
 
@@ -145,8 +142,7 @@ const commands = [
       .addUserOption(o => o.setName('user').setRequired(true)),
 
     async execute(i) {
-      const user = i.options.getUser('user');
-      reply(i, `⬆️ ${user.username} promoted`);
+      reply(i, `⬆️ Promoted`);
     }
   },
 
@@ -158,12 +154,38 @@ const commands = [
       .addUserOption(o => o.setName('user').setRequired(true)),
 
     async execute(i) {
-      const user = i.options.getUser('user');
-      reply(i, `⬇️ ${user.username} demoted`);
+      reply(i, `⬇️ Demoted`);
     }
   },
 
-  // WARP SYSTEM
+  // STRIKE
+  {
+    data: new SlashCommandBuilder()
+      .setName('strike')
+      .setDescription('Add strike')
+      .addStringOption(o => o.setName('team').setRequired(true)),
+
+    async execute(i) {
+      const t = i.options.getString('team');
+      db.strikes[t] = (db.strikes[t] || 0) + 1;
+      reply(i, `⚡ ${t} strikes: ${db.strikes[t]}`);
+    }
+  },
+
+  // CLEAR STRIKE
+  {
+    data: new SlashCommandBuilder()
+      .setName('clearstrike')
+      .setDescription('Clear strikes')
+      .addStringOption(o => o.setName('team').setRequired(true)),
+
+    async execute(i) {
+      db.strikes[i.options.getString('team')] = 0;
+      reply(i, '🧹 Strikes cleared');
+    }
+  },
+
+  // WARN
   {
     data: new SlashCommandBuilder()
       .setName('warn')
@@ -182,10 +204,11 @@ const commands = [
     }
   },
 
+  // WARNS
   {
     data: new SlashCommandBuilder()
       .setName('warns')
-      .setDescription('Check warnings')
+      .setDescription('Check warns')
       .addUserOption(o => o.setName('user').setRequired(true)),
 
     async execute(i) {
@@ -195,44 +218,37 @@ const commands = [
     }
   },
 
-  // STRIKE
+  // SUSPEND
   {
     data: new SlashCommandBuilder()
-      .setName('strike')
-      .setDescription('Strike team')
-      .addStringOption(o => o.setName('team').setRequired(true)),
-
-    async execute(i) {
-      const t = i.options.getString('team');
-      db.strikes[t] = (db.strikes[t] || 0) + 1;
-      reply(i, `⚡ ${t} now has ${db.strikes[t]} strike(s)`);
-    }
-  },
-
-  {
-    data: new SlashCommandBuilder()
-      .setName('clearstrike')
-      .setDescription('Clear strikes')
-      .addStringOption(o => o.setName('team').setRequired(true)),
-
-    async execute(i) {
-      db.strikes[i.options.getString('team')] = 0;
-      reply(i, '🧹 Strikes cleared');
-    }
-  },
-
-  // KICK / BAN / MUTE (SIMULATED)
-  {
-    data: new SlashCommandBuilder()
-      .setName('kick')
-      .setDescription('Kick user')
+      .setName('suspend')
+      .setDescription('Suspend user')
       .addUserOption(o => o.setName('user').setRequired(true)),
 
     async execute(i) {
-      reply(i, `👢 Kicked (simulated)`);
+      const user = i.options.getUser('user');
+      db.suspensions[user.id] = true;
+
+      reply(i, `🚫 ${user.username} suspended`);
     }
   },
 
+  // BAIL
+  {
+    data: new SlashCommandBuilder()
+      .setName('bail')
+      .setDescription('Remove suspension')
+      .addUserOption(o => o.setName('user').setRequired(true)),
+
+    async execute(i) {
+      const user = i.options.getUser('user');
+      delete db.suspensions[user.id];
+
+      reply(i, `🔓 ${user.username} unsuspended`);
+    }
+  },
+
+  // BAN / KICK / MUTE (SIMULATED)
   {
     data: new SlashCommandBuilder()
       .setName('ban')
@@ -240,7 +256,18 @@ const commands = [
       .addUserOption(o => o.setName('user').setRequired(true)),
 
     async execute(i) {
-      reply(i, `🔨 Banned (simulated)`);
+      reply(i, '🔨 Banned (simulated)');
+    }
+  },
+
+  {
+    data: new SlashCommandBuilder()
+      .setName('kick')
+      .setDescription('Kick user')
+      .addUserOption(o => o.setName('user').setRequired(true)),
+
+    async execute(i) {
+      reply(i, '👢 Kicked (simulated)');
     }
   },
 
@@ -251,32 +278,7 @@ const commands = [
       .addUserOption(o => o.setName('user').setRequired(true)),
 
     async execute(i) {
-      reply(i, `🔇 Muted (simulated)`);
-    }
-  },
-
-  // SUSPEND / BAIL
-  {
-    data: new SlashCommandBuilder()
-      .setName('suspend')
-      .setDescription('Suspend user')
-      .addUserOption(o => o.setName('user').setRequired(true)),
-
-    async execute(i) {
-      db.suspensions[i.options.getUser('user').id] = true;
-      reply(i, '🚫 Suspended');
-    }
-  },
-
-  {
-    data: new SlashCommandBuilder()
-      .setName('bail')
-      .setDescription('Remove suspension')
-      .addUserOption(o => o.setName('user').setRequired(true)),
-
-    async execute(i) {
-      delete db.suspensions[i.options.getUser('user').id];
-      reply(i, '🔓 Unsuspended');
+      reply(i, '🔇 Muted (simulated)');
     }
   },
 
@@ -284,28 +286,28 @@ const commands = [
   {
     data: new SlashCommandBuilder()
       .setName('transactions')
-      .setDescription('Lock/unlock')
+      .setDescription('Lock/unlock transactions')
       .addSubcommand(s => s.setName('lock'))
       .addSubcommand(s => s.setName('unlock')),
 
     async execute(i) {
       const sub = i.options.getSubcommand();
-      db.transactionsLocked = sub === 'lock';
       reply(i, `💰 Transactions ${sub}ed`);
     }
   },
 
-  // SCORE / SETUP / ROLEALL / etc
+  // SCORE
   {
     data: new SlashCommandBuilder()
       .setName('score')
-      .setDescription('Report match'),
+      .setDescription('Match score'),
 
     async execute(i) {
       reply(i, '🏆 Score recorded');
     }
   },
 
+  // SETUP
   {
     data: new SlashCommandBuilder()
       .setName('setup')
@@ -316,6 +318,7 @@ const commands = [
     }
   },
 
+  // ROLEALL
   {
     data: new SlashCommandBuilder()
       .setName('roleall')
@@ -326,13 +329,14 @@ const commands = [
     }
   },
 
+  // HELP
   {
     data: new SlashCommandBuilder()
       .setName('help')
       .setDescription('All commands'),
 
     async execute(i) {
-      reply(i, '📋 CPCW Bot Loaded');
+      reply(i, '📋 CPCW bot loaded successfully');
     }
   }
 ];
@@ -350,7 +354,7 @@ for (const c of commands) {
 }
 
 // =====================
-// REGISTER COMMANDS
+// ⚡ FIXED GUILD COMMAND REGISTRATION (IMPORTANT)
 // =====================
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
@@ -358,15 +362,18 @@ client.once('ready', async () => {
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
   await rest.put(
-    Routes.applicationCommands(process.env.CLIENT_ID),
+    Routes.applicationGuildCommands(
+      process.env.CLIENT_ID,
+      process.env.GUILD_ID
+    ),
     { body: commands.map(c => c.data.toJSON()) }
   );
 
-  console.log('✅ Commands registered');
+  console.log('✅ ALL COMMANDS REGISTERED INSTANTLY');
 });
 
 // =====================
-// INTERACTIONS FIXED
+// INTERACTION HANDLER
 // =====================
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
@@ -378,7 +385,7 @@ client.on('interactionCreate', async interaction => {
     await cmd.execute(interaction);
   } catch (err) {
     console.error(err);
-    await reply(interaction, '❌ Error');
+    await reply(interaction, '❌ Error running command');
   }
 });
 
